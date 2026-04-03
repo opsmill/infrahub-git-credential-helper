@@ -91,3 +91,57 @@ jobs:
       ref: ${{ github.sha }}
       tags: ${{ needs.metadata.outputs.tags }}
       labels: ${{ needs.metadata.outputs.labels }}
+
+  publish-binaries:
+    needs: test
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            artifact: infrahub-git-credential-helper-linux-amd64
+            setup: sudo apt-get update && sudo apt-get install -y musl-tools
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            artifact: infrahub-git-credential-helper-linux-arm64
+            setup: sudo apt-get update && sudo apt-get install -y musl-tools
+          - runner: macos-latest
+            target: aarch64-apple-darwin
+            artifact: infrahub-git-credential-helper-darwin-arm64
+            setup: ""
+          - runner: macos-13
+            target: x86_64-apple-darwin
+            artifact: infrahub-git-credential-helper-darwin-amd64
+            setup: ""
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install build dependencies
+        if: matrix.setup != ''
+        run: ${{ matrix.setup }}
+
+      - name: Build release binaries
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package binaries
+        run: |
+          tar -czf ${{ matrix.artifact }}.tar.gz \
+            -C target/${{ matrix.target }}/release \
+            infrahub-git-credential infrahub-git-askpass
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.artifact }}.tar.gz
