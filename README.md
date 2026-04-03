@@ -45,14 +45,14 @@ Binaries are output to `target/release/infrahub-git-credential` and `target/rele
 The project includes a multi-stage Dockerfile that produces statically linked binaries (musl) in a scratch-based image. Supports both `amd64` and `arm64` architectures.
 
 ```sh
-docker build -t infrahub-git-credential .
+docker build -t registry.opsmill.io/opsmill/infrahub-git-credential-helper .
 ```
 
 Use in a downstream Dockerfile:
 
 ```dockerfile
-COPY --from=infrahub-git-credential /usr/bin/infrahub-git-credential /usr/bin/infrahub-git-credential
-COPY --from=infrahub-git-credential /usr/bin/infrahub-git-askpass /usr/bin/infrahub-git-askpass
+COPY --from=registry.opsmill.io/opsmill/infrahub-git-credential-helper:latest /usr/bin/infrahub-git-credential /usr/bin/infrahub-git-credential
+COPY --from=registry.opsmill.io/opsmill/infrahub-git-credential-helper:latest /usr/bin/infrahub-git-askpass /usr/bin/infrahub-git-askpass
 ```
 
 ## License

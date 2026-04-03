@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.94"
 license = "Apache-2.0"
-description = "Git credential helpers for Infrahub"
-repository = "https://github.com/opsmill/infrahub-credential-helper"
+description = "Git credential helper for Infrahub"
+repository = "https://github.com/opsmill/infrahub-git-credential-helper"
 
 [dependencies]
 clap = { version = "4", features = ["derive", "env"] }
