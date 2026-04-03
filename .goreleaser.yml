@@ -1,0 +1,56 @@
+---
+version: 2
+
+before:
+  hooks:
+    - rustup default stable
+    - cargo install --locked cargo-zigbuild
+
+builds:
+  - id: infrahub-git-credential
+    builder: rust
+    binary: infrahub-git-credential
+    command: zigbuild
+    flags:
+      - --release
+      - --bin
+      - infrahub-git-credential
+    targets:
+      - x86_64-unknown-linux-musl
+      - aarch64-unknown-linux-musl
+      - x86_64-apple-darwin
+      - aarch64-apple-darwin
+
+  - id: infrahub-git-askpass
+    builder: rust
+    binary: infrahub-git-askpass
+    command: zigbuild
+    flags:
+      - --release
+      - --bin
+      - infrahub-git-askpass
+    targets:
+      - x86_64-unknown-linux-musl
+      - aarch64-unknown-linux-musl
+      - x86_64-apple-darwin
+      - aarch64-apple-darwin
+
+universal_binaries:
+  - ids:
+      - infrahub-git-credential
+    replace: true
+  - ids:
+      - infrahub-git-askpass
+    replace: true
+
+archives:
+  - formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  prerelease: auto
