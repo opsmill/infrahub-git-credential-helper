@@ -23,4 +23,4 @@ clean:
 	cargo clean
 
 docker:
-	docker build -t infrahub-git-credential .
+	docker build -t registry.opsmill.io/opsmill/infrahub-git-credential-helper .
