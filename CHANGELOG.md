@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.2] - 2026-04-07
+
+### Fixed
+
+- GoReleaser: removed universal binaries in favor of per-architecture archives for consistent Linux/macOS parity
+
 ## [0.1.1] - 2026-04-07
 
 ### Fixed

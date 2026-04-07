@@ -35,19 +35,10 @@ builds:
       - x86_64-apple-darwin
       - aarch64-apple-darwin
 
-universal_binaries:
-  - id: infrahub-git-credential
-    ids:
-      - infrahub-git-credential
-    replace: true
-  - id: infrahub-git-askpass
-    ids:
-      - infrahub-git-askpass
-    replace: true
-
 archives:
   - formats:
       - tar.gz
+    allow_different_binary_count: true
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
 
