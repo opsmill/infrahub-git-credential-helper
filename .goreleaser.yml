@@ -36,10 +36,12 @@ builds:
       - aarch64-apple-darwin
 
 universal_binaries:
-  - ids:
+  - id: infrahub-git-credential
+    ids:
       - infrahub-git-credential
     replace: true
-  - ids:
+  - id: infrahub-git-askpass
+    ids:
       - infrahub-git-askpass
     replace: true
 
