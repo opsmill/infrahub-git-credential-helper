@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1] - 2026-04-07
+
+### Fixed
+
+- GoReleaser config: unique IDs for universal binary entries
+- Release workflow: `grep -c` exit code handling for non-prerelease versions
+
 ## [0.1.0] - 2026-04-07
 
 ### Added
