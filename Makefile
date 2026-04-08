@@ -1,4 +1,4 @@
-.PHONY: build release check fmt lint test clean docker
+.PHONY: build release check fmt lint test clean docker update-schema
 
 build:
 	cargo build
@@ -24,3 +24,6 @@ clean:
 
 docker:
 	docker build -t registry.opsmill.io/opsmill/infrahub-git-credential-helper .
+
+update-schema:
+	curl -sL https://raw.githubusercontent.com/opsmill/infrahub/stable/schema/schema.graphql -o schema/schema.graphql
