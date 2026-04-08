@@ -27,6 +27,15 @@ Configuration is resolved in the following order:
 | Server address | `INFRAHUB_INTERNAL_ADDRESS` | `[main].internal_address` | - |
 | API token | `INFRAHUB_API_TOKEN` | - | None |
 | Config file path | `INFRAHUB_CONFIG` | - | `infrahub.toml` |
+| Username | `INFRAHUB_USERNAME` | - | None |
+| Password | `INFRAHUB_PASSWORD` | - | None |
+| Proxy | `INFRAHUB_PROXY` | - | None |
+| Skip TLS verification | `INFRAHUB_TLS_INSECURE` | - | `false` |
+| Custom CA certificate | `INFRAHUB_TLS_CA_FILE` | - | None |
+
+Authentication supports two methods:
+- **Token auth**: set `INFRAHUB_API_TOKEN` — sent as `X-INFRAHUB-KEY` header
+- **Password auth**: set `INFRAHUB_USERNAME` and `INFRAHUB_PASSWORD` — logs in via `/api/auth/login` to obtain a bearer token
 
 Both binaries also accept `--config-file <path>` to override the config file path.
 

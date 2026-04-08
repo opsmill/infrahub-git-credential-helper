@@ -28,47 +28,117 @@ struct MainSection {
 pub struct InfrahubConfig {
     pub address: String,
     pub api_token: Option<String>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub proxy: Option<String>,
+    pub tls_insecure: bool,
+    pub tls_ca_file: Option<String>,
 }
 
 impl InfrahubConfig {
     /// Load configuration with priority: env vars > TOML file.
     ///
     /// Address: INFRAHUB_INTERNAL_ADDRESS env > `[main].internal_address` from TOML.
+    /// Auth: INFRAHUB_API_TOKEN (token auth) or INFRAHUB_USERNAME + INFRAHUB_PASSWORD (password auth).
     /// Config file path: `--config-file` arg > INFRAHUB_CONFIG env > `infrahub.toml`.
     pub fn load(config_file_override: Option<&str>) -> Result<Self, String> {
         let api_token = env::var("INFRAHUB_API_TOKEN").ok();
+        let username = env::var("INFRAHUB_USERNAME").ok();
+        let password = env::var("INFRAHUB_PASSWORD").ok();
+        let proxy = env::var("INFRAHUB_PROXY").ok();
+        let tls_insecure = env::var("INFRAHUB_TLS_INSECURE")
+            .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1" | "yes"))
+            .unwrap_or(false);
+        let tls_ca_file = env::var("INFRAHUB_TLS_CA_FILE").ok();
 
-        if let Ok(address) = env::var("INFRAHUB_INTERNAL_ADDRESS") {
-            return Ok(Self { address, api_token });
-        }
+        let address = if let Ok(addr) = env::var("INFRAHUB_INTERNAL_ADDRESS") {
+            Some(addr)
+        } else {
+            let config_path = config_file_override
+                .map(String::from)
+                .or_else(|| env::var("INFRAHUB_CONFIG").ok())
+                .unwrap_or_else(|| "infrahub.toml".to_string());
 
-        let config_path = config_file_override
-            .map(String::from)
-            .or_else(|| env::var("INFRAHUB_CONFIG").ok())
-            .unwrap_or_else(|| "infrahub.toml".to_string());
-
-        if let Ok(content) = fs::read_to_string(&config_path) {
-            let toml_config: TomlConfig = toml::from_str(&content)
-                .map_err(|e| format!("Failed to parse config file: {e}"))?;
-
-            if let Some(main) = toml_config.main
-                && let Some(address) = main.internal_address
-            {
-                return Ok(Self { address, api_token });
+            if let Ok(content) = fs::read_to_string(&config_path) {
+                let toml_config: TomlConfig = toml::from_str(&content)
+                    .map_err(|e| format!("Failed to parse config file: {e}"))?;
+                toml_config.main.and_then(|m| m.internal_address)
+            } else {
+                None
             }
-        }
+        };
 
-        Err(
-            "No Infrahub server address configured. Set INFRAHUB_INTERNAL_ADDRESS or configure [main].internal_address in config file.".to_string(),
-        )
+        let address = address.ok_or(
+            "No Infrahub server address configured. Set INFRAHUB_INTERNAL_ADDRESS or configure [main].internal_address in config file.",
+        )?;
+
+        Ok(Self {
+            address,
+            api_token,
+            username,
+            password,
+            proxy,
+            tls_insecure,
+            tls_ca_file,
+        })
     }
 }
 
-fn build_agent() -> ureq::Agent {
-    ureq::config::Config::builder()
+fn build_agent(config: &InfrahubConfig) -> Result<ureq::Agent, String> {
+    let mut tls_builder = ureq::tls::TlsConfig::builder();
+
+    if config.tls_insecure {
+        tls_builder = tls_builder.disable_verification(true);
+    } else if let Some(ca_file) = &config.tls_ca_file {
+        let pem_data = fs::read(ca_file).map_err(|e| format!("Failed to read CA file: {e}"))?;
+        let cert = ureq::tls::Certificate::from_pem(&pem_data)
+            .map_err(|e| format!("Failed to parse CA certificate: {e}"))?;
+        tls_builder = tls_builder.root_certs(ureq::tls::RootCerts::new_with_certs(&[cert]));
+    }
+
+    let mut config_builder = ureq::config::Config::builder()
         .timeout_global(Some(Duration::from_secs(10)))
-        .build()
-        .new_agent()
+        .tls_config(tls_builder.build());
+
+    if let Some(proxy_url) = &config.proxy {
+        let proxy = ureq::Proxy::new(proxy_url).map_err(|e| format!("Invalid proxy URL: {e}"))?;
+        config_builder = config_builder.proxy(Some(proxy));
+    }
+
+    Ok(config_builder.build().new_agent())
+}
+
+/// Authenticate with Infrahub and return the auth header (key, value).
+fn resolve_auth_header(
+    agent: &ureq::Agent,
+    config: &InfrahubConfig,
+) -> Result<Option<(String, String)>, String> {
+    if let Some(token) = &config.api_token {
+        return Ok(Some(("X-INFRAHUB-KEY".to_string(), token.clone())));
+    }
+
+    if let (Some(username), Some(password)) = (&config.username, &config.password) {
+        let url = format!("{}/api/auth/login", config.address.trim_end_matches('/'));
+        let body = serde_json::json!({ "username": username, "password": password });
+        let mut resp = agent
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .send_json(&body)
+            .map_err(|e| format!("Authentication failed: {e}"))?;
+        let data: serde_json::Value = resp
+            .body_mut()
+            .read_json()
+            .map_err(|e| format!("Failed to parse auth response: {e}"))?;
+        let access_token = data["access_token"]
+            .as_str()
+            .ok_or("Authentication response missing access_token")?;
+        return Ok(Some((
+            "Authorization".to_string(),
+            format!("Bearer {access_token}"),
+        )));
+    }
+
+    Ok(None)
 }
 
 /// Fetch credentials for a git repository from the Infrahub GraphQL API.
@@ -76,7 +146,8 @@ pub fn fetch_credential(
     config: &InfrahubConfig,
     location: &str,
 ) -> Result<(String, String), String> {
-    let agent = build_agent();
+    let agent = build_agent(config)?;
+    let auth_header = resolve_auth_header(&agent, config)?;
     let url = format!("{}/graphql/main", config.address.trim_end_matches('/'));
 
     let variables = get_repo_credential::Variables {
@@ -85,8 +156,8 @@ pub fn fetch_credential(
     let request_body = GetRepoCredential::build_query(variables);
 
     let mut req = agent.post(&url).header("Content-Type", "application/json");
-    if let Some(token) = &config.api_token {
-        req = req.header("X-INFRAHUB-KEY", token);
+    if let Some((key, value)) = &auth_header {
+        req = req.header(key.as_str(), value.as_str());
     }
 
     let mut resp = req.send_json(&request_body).map_err(|e| format!("{e}"))?;
@@ -197,6 +268,23 @@ mod tests {
         unsafe {
             remove_env("INFRAHUB_INTERNAL_ADDRESS");
             remove_env("INFRAHUB_API_TOKEN");
+        }
+    }
+
+    #[test]
+    fn config_username_password_from_env() {
+        unsafe {
+            set_env("INFRAHUB_INTERNAL_ADDRESS", "http://test:8000");
+            set_env("INFRAHUB_USERNAME", "admin");
+            set_env("INFRAHUB_PASSWORD", "infrahub");
+        }
+        let config = InfrahubConfig::load(None).unwrap();
+        assert_eq!(config.username.as_deref(), Some("admin"));
+        assert_eq!(config.password.as_deref(), Some("infrahub"));
+        unsafe {
+            remove_env("INFRAHUB_INTERNAL_ADDRESS");
+            remove_env("INFRAHUB_USERNAME");
+            remove_env("INFRAHUB_PASSWORD");
         }
     }
 
@@ -330,5 +418,59 @@ mod tests {
             };
         let err = extract_credential(resp).unwrap_err();
         assert_eq!(err, "No data in API response");
+    }
+
+    #[test]
+    fn resolve_auth_header_with_token() {
+        let config = InfrahubConfig {
+            address: "http://test:8000".to_string(),
+            api_token: Some("mytoken".to_string()),
+            username: None,
+            password: None,
+            proxy: None,
+            tls_insecure: false,
+            tls_ca_file: None,
+        };
+        let agent = build_agent(&config).unwrap();
+        let header = resolve_auth_header(&agent, &config).unwrap();
+        assert_eq!(
+            header,
+            Some(("X-INFRAHUB-KEY".to_string(), "mytoken".to_string()))
+        );
+    }
+
+    #[test]
+    fn resolve_auth_header_with_no_credentials() {
+        let config = InfrahubConfig {
+            address: "http://test:8000".to_string(),
+            api_token: None,
+            username: None,
+            password: None,
+            proxy: None,
+            tls_insecure: false,
+            tls_ca_file: None,
+        };
+        let agent = build_agent(&config).unwrap();
+        let header = resolve_auth_header(&agent, &config).unwrap();
+        assert_eq!(header, None);
+    }
+
+    #[test]
+    fn resolve_auth_header_token_takes_priority() {
+        let config = InfrahubConfig {
+            address: "http://test:8000".to_string(),
+            api_token: Some("mytoken".to_string()),
+            username: Some("admin".to_string()),
+            password: Some("pass".to_string()),
+            proxy: None,
+            tls_insecure: false,
+            tls_ca_file: None,
+        };
+        let agent = build_agent(&config).unwrap();
+        let header = resolve_auth_header(&agent, &config).unwrap();
+        assert_eq!(
+            header,
+            Some(("X-INFRAHUB-KEY".to_string(), "mytoken".to_string()))
+        );
     }
 }
