@@ -420,17 +420,25 @@ mod tests {
         assert_eq!(err, "No data in API response");
     }
 
-    #[test]
-    fn resolve_auth_header_with_token() {
-        let config = InfrahubConfig {
+    fn test_config(
+        api_token: Option<&str>,
+        username: Option<&str>,
+        password: Option<&str>,
+    ) -> InfrahubConfig {
+        InfrahubConfig {
             address: "http://test:8000".to_string(),
-            api_token: Some("mytoken".to_string()),
-            username: None,
-            password: None,
+            api_token: api_token.map(String::from),
+            username: username.map(String::from),
+            password: password.map(String::from),
             proxy: None,
             tls_insecure: false,
             tls_ca_file: None,
-        };
+        }
+    }
+
+    #[test]
+    fn resolve_auth_header_with_token() {
+        let config = test_config(Some("mytoken"), None, None);
         let agent = build_agent(&config).unwrap();
         let header = resolve_auth_header(&agent, &config).unwrap();
         assert_eq!(
@@ -441,15 +449,7 @@ mod tests {
 
     #[test]
     fn resolve_auth_header_with_no_credentials() {
-        let config = InfrahubConfig {
-            address: "http://test:8000".to_string(),
-            api_token: None,
-            username: None,
-            password: None,
-            proxy: None,
-            tls_insecure: false,
-            tls_ca_file: None,
-        };
+        let config = test_config(None, None, None);
         let agent = build_agent(&config).unwrap();
         let header = resolve_auth_header(&agent, &config).unwrap();
         assert_eq!(header, None);
@@ -457,15 +457,7 @@ mod tests {
 
     #[test]
     fn resolve_auth_header_token_takes_priority() {
-        let config = InfrahubConfig {
-            address: "http://test:8000".to_string(),
-            api_token: Some("mytoken".to_string()),
-            username: Some("admin".to_string()),
-            password: Some("pass".to_string()),
-            proxy: None,
-            tls_insecure: false,
-            tls_ca_file: None,
-        };
+        let config = test_config(Some("mytoken"), Some("admin"), Some("pass"));
         let agent = build_agent(&config).unwrap();
         let header = resolve_auth_header(&agent, &config).unwrap();
         assert_eq!(
