@@ -2,7 +2,18 @@ use std::env;
 use std::fs;
 use std::time::Duration;
 
+use graphql_client::GraphQLQuery;
 use serde::Deserialize;
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "schema/schema.graphql",
+    query_path = "src/graphql/get_repo_credential.graphql",
+    response_derives = "Debug"
+)]
+struct GetRepoCredential;
+
+use get_repo_credential::GetRepoCredentialCoreGenericRepositoryEdgesNodeCredentialNodeOn as CredentialOn;
 
 #[derive(Deserialize)]
 struct TomlConfig {
@@ -60,52 +71,6 @@ fn build_agent() -> ureq::Agent {
         .new_agent()
 }
 
-fn post_graphql(
-    agent: &ureq::Agent,
-    url: &str,
-    query: &str,
-    api_token: Option<&str>,
-) -> Result<serde_json::Value, String> {
-    let body = serde_json::json!({ "query": query });
-
-    let mut req = agent.post(url).header("Content-Type", "application/json");
-
-    if let Some(token) = api_token {
-        req = req.header("X-INFRAHUB-KEY", token);
-    }
-
-    let mut resp = req.send_json(&body).map_err(|e| format!("{e}"))?;
-    resp.body_mut()
-        .read_json::<serde_json::Value>()
-        .map_err(|e| format!("{e}"))
-}
-
-fn escape_graphql_string(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '"' => out.push_str("\\\""),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if c.is_control() => {
-                for unit in c.encode_utf16(&mut [0; 2]) {
-                    out.push_str(&format!("\\u{unit:04x}"));
-                }
-            }
-            c => out.push(c),
-        }
-    }
-    out
-}
-
-fn is_valid_graphql_type_name(s: &str) -> bool {
-    !s.is_empty()
-        && s.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
-        && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-}
-
 /// Fetch credentials for a git repository from the Infrahub GraphQL API.
 pub fn fetch_credential(
     config: &InfrahubConfig,
@@ -114,108 +79,63 @@ pub fn fetch_credential(
     let agent = build_agent();
     let url = format!("{}/graphql/main", config.address.trim_end_matches('/'));
 
-    let query1 = format!(
-        r#"query {{ CoreGenericRepository(location__value: "{}") {{ edges {{ node {{ id display_label credential {{ node {{ id display_label __typename }} }} }} }} }} }}"#,
-        escape_graphql_string(location)
-    );
+    let variables = get_repo_credential::Variables {
+        location: location.to_string(),
+    };
+    let request_body = GetRepoCredential::build_query(variables);
 
-    let data = post_graphql(&agent, &url, &query1, config.api_token.as_deref())?;
+    let mut req = agent.post(&url).header("Content-Type", "application/json");
+    if let Some(token) = &config.api_token {
+        req = req.header("X-INFRAHUB-KEY", token);
+    }
 
-    let edges = data["data"]["CoreGenericRepository"]["edges"]
-        .as_array()
-        .ok_or_else(|| "Repository not found in the database.".to_string())?;
+    let mut resp = req.send_json(&request_body).map_err(|e| format!("{e}"))?;
+    let response_body: graphql_client::Response<get_repo_credential::ResponseData> =
+        resp.body_mut().read_json().map_err(|e| format!("{e}"))?;
 
+    extract_credential(response_body)
+}
+
+fn extract_credential(
+    response: graphql_client::Response<get_repo_credential::ResponseData>,
+) -> Result<(String, String), String> {
+    let data = response.data.ok_or("No data in API response")?;
+
+    let edges = &data.core_generic_repository.edges;
     if edges.is_empty() {
         return Err("Repository not found in the database.".to_string());
     }
 
-    let cred_node = &edges[0]["node"]["credential"]["node"];
+    let repo_node = edges[0]
+        .node
+        .as_ref()
+        .ok_or("Repository not found in the database.")?;
+    let cred_node = repo_node
+        .credential
+        .node
+        .as_ref()
+        .ok_or("Repository doesn't have credentials defined.")?;
 
-    if cred_node.is_null() {
-        return Err("Repository doesn't have credentials defined.".to_string());
+    match cred_node.on {
+        CredentialOn::CorePasswordCredential(ref cred) => {
+            let username = cred
+                .username
+                .as_ref()
+                .and_then(|u| u.value.clone())
+                .ok_or("Failed to extract username from credentials.")?;
+            let password = cred
+                .password
+                .as_ref()
+                .and_then(|p| p.value.clone())
+                .ok_or("Failed to extract password from credentials.")?;
+            Ok((username, password))
+        }
     }
-
-    let cred_id = cred_node["id"]
-        .as_str()
-        .ok_or_else(|| "Repository doesn't have credentials defined.".to_string())?;
-    let cred_typename = cred_node["__typename"]
-        .as_str()
-        .ok_or_else(|| "Repository doesn't have credentials defined.".to_string())?;
-
-    if !is_valid_graphql_type_name(cred_typename) {
-        return Err("Invalid credential type received from API.".to_string());
-    }
-    let query2 = format!(
-        r#"query {{ {}(ids: ["{}"]) {{ edges {{ node {{ id username {{ value }} password {{ value }} }} }} }} }}"#,
-        cred_typename,
-        escape_graphql_string(cred_id)
-    );
-
-    let data2 = post_graphql(&agent, &url, &query2, config.api_token.as_deref())?;
-
-    let edges2 = data2["data"][cred_typename]["edges"]
-        .as_array()
-        .ok_or_else(|| "Failed to fetch credentials.".to_string())?;
-
-    if edges2.is_empty() {
-        return Err("Failed to fetch credentials.".to_string());
-    }
-
-    let cred = &edges2[0]["node"];
-    let username = cred["username"]["value"]
-        .as_str()
-        .ok_or_else(|| "Failed to extract credentials.".to_string())?
-        .to_string();
-    let password = cred["password"]["value"]
-        .as_str()
-        .ok_or_else(|| "Failed to extract credentials.".to_string())?
-        .to_string();
-
-    Ok((username, password))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn escape_graphql_quotes_and_backslashes() {
-        assert_eq!(escape_graphql_string(r#"a"b\c"#), r#"a\"b\\c"#);
-    }
-
-    #[test]
-    fn escape_graphql_newlines_and_tabs() {
-        assert_eq!(escape_graphql_string("a\nb\tc\r"), "a\\nb\\tc\\r");
-    }
-
-    #[test]
-    fn escape_graphql_control_characters() {
-        assert_eq!(escape_graphql_string("a\x00b\x1fc"), "a\\u0000b\\u001fc");
-    }
-
-    #[test]
-    fn escape_graphql_injection_attempt() {
-        let malicious = r#"repo") { injected }"#;
-        let escaped = escape_graphql_string(malicious);
-        assert_eq!(escaped, r#"repo\") { injected }"#);
-    }
-
-    #[test]
-    fn valid_graphql_type_names() {
-        assert!(is_valid_graphql_type_name("CorePasswordCredential"));
-        assert!(is_valid_graphql_type_name("_Private"));
-    }
-
-    #[test]
-    fn invalid_graphql_type_names_reject_injection() {
-        assert!(!is_valid_graphql_type_name(""));
-        assert!(!is_valid_graphql_type_name("1StartsWithDigit"));
-        assert!(!is_valid_graphql_type_name("has-dash"));
-        assert!(!is_valid_graphql_type_name("has space"));
-        // Injection attempts
-        assert!(!is_valid_graphql_type_name("Type{evil}"));
-        assert!(!is_valid_graphql_type_name("Type(ids:[])"));
-    }
 
     // SAFETY: `env::set_var`/`remove_var` are unsafe because concurrent access to
     // env vars is undefined behavior. These tests run single-threaded (`--test-threads=1`
@@ -299,5 +219,116 @@ mod tests {
         assert!(result.is_err());
 
         fs::remove_dir_all(&dir).ok();
+    }
+
+    fn mock_response(json: &str) -> graphql_client::Response<get_repo_credential::ResponseData> {
+        serde_json::from_str(json).unwrap()
+    }
+
+    #[test]
+    fn extract_credential_success() {
+        let resp = mock_response(
+            r#"{
+                "data": {
+                    "CoreGenericRepository": {
+                        "edges": [{
+                            "node": {
+                                "__typename": "CoreRepository",
+                                "id": "repo-1",
+                                "credential": {
+                                    "node": {
+                                        "__typename": "CorePasswordCredential",
+                                        "id": "cred-1",
+                                        "username": { "value": "myuser" },
+                                        "password": { "value": "mypass" }
+                                    }
+                                }
+                            }
+                        }]
+                    }
+                }
+            }"#,
+        );
+        let (username, password) = extract_credential(resp).unwrap();
+        assert_eq!(username, "myuser");
+        assert_eq!(password, "mypass");
+    }
+
+    #[test]
+    fn extract_credential_empty_edges() {
+        let resp = mock_response(
+            r#"{
+                "data": {
+                    "CoreGenericRepository": {
+                        "edges": []
+                    }
+                }
+            }"#,
+        );
+        let err = extract_credential(resp).unwrap_err();
+        assert_eq!(err, "Repository not found in the database.");
+    }
+
+    #[test]
+    fn extract_credential_no_credential_node() {
+        let resp = mock_response(
+            r#"{
+                "data": {
+                    "CoreGenericRepository": {
+                        "edges": [{
+                            "node": {
+                                "__typename": "CoreRepository",
+                                "id": "repo-1",
+                                "credential": {
+                                    "node": null
+                                }
+                            }
+                        }]
+                    }
+                }
+            }"#,
+        );
+        let err = extract_credential(resp).unwrap_err();
+        assert_eq!(err, "Repository doesn't have credentials defined.");
+    }
+
+    #[test]
+    fn extract_credential_missing_username() {
+        let resp = mock_response(
+            r#"{
+                "data": {
+                    "CoreGenericRepository": {
+                        "edges": [{
+                            "node": {
+                                "__typename": "CoreRepository",
+                                "id": "repo-1",
+                                "credential": {
+                                    "node": {
+                                        "__typename": "CorePasswordCredential",
+                                        "id": "cred-1",
+                                        "username": null,
+                                        "password": { "value": "mypass" }
+                                    }
+                                }
+                            }
+                        }]
+                    }
+                }
+            }"#,
+        );
+        let err = extract_credential(resp).unwrap_err();
+        assert_eq!(err, "Failed to extract username from credentials.");
+    }
+
+    #[test]
+    fn extract_credential_no_data() {
+        let resp: graphql_client::Response<get_repo_credential::ResponseData> =
+            graphql_client::Response {
+                data: None,
+                errors: None,
+                extensions: None,
+            };
+        let err = extract_credential(resp).unwrap_err();
+        assert_eq!(err, "No data in API response");
     }
 }

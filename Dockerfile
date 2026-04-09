@@ -18,6 +18,8 @@ WORKDIR /app
 
 # Cache dependency build layer
 COPY Cargo.toml Cargo.lock ./
+COPY schema/ schema/
+COPY src/graphql/ src/graphql/
 RUN mkdir -p src/bin && \
     echo "fn main() {}" > src/bin/infrahub-git-credential.rs && \
     echo "fn main() {}" > src/bin/infrahub-git-askpass.rs && \

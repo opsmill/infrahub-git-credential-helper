@@ -32,6 +32,18 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy -- -D warnings
 
+  schema:
+    name: Schema Compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Fetch latest schema from Infrahub
+        run: curl -sL https://raw.githubusercontent.com/opsmill/infrahub/stable/schema/schema.graphql -o schema/schema.graphql
+      - name: Verify queries compile against latest schema
+        run: cargo check
+
   test:
     name: Test
     runs-on: ubuntu-latest
