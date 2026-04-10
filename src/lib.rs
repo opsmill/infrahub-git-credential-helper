@@ -155,7 +155,10 @@ pub fn fetch_credential(
     };
     let request_body = GetRepoCredential::build_query(variables);
 
-    let mut req = agent.post(&url).header("Content-Type", "application/json");
+    let mut req = agent
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("X-Infrahub-Tracker", "infrahub-git-credential-helper");
     if let Some((key, value)) = &auth_header {
         req = req.header(key.as_str(), value.as_str());
     }
