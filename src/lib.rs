@@ -30,6 +30,7 @@ pub struct InfrahubConfig {
     pub api_token: Option<String>,
     pub username: Option<String>,
     pub password: Option<String>,
+    pub timeout: u64,
     pub proxy: Option<String>,
     pub tls_insecure: bool,
     pub tls_ca_file: Option<String>,
@@ -49,6 +50,10 @@ impl InfrahubConfig {
         let tls_insecure = env::var("INFRAHUB_TLS_INSECURE")
             .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1" | "yes"))
             .unwrap_or(false);
+        let timeout = env::var("INFRAHUB_TIMEOUT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(30);
         let tls_ca_file = env::var("INFRAHUB_TLS_CA_FILE").ok();
 
         let address = if let Ok(addr) = env::var("INFRAHUB_INTERNAL_ADDRESS") {
@@ -77,6 +82,7 @@ impl InfrahubConfig {
             api_token,
             username,
             password,
+            timeout,
             proxy,
             tls_insecure,
             tls_ca_file,
@@ -97,7 +103,7 @@ fn build_agent(config: &InfrahubConfig) -> Result<ureq::Agent, String> {
     }
 
     let mut config_builder = ureq::config::Config::builder()
-        .timeout_global(Some(Duration::from_secs(10)))
+        .timeout_global(Some(Duration::from_secs(config.timeout)))
         .tls_config(tls_builder.build());
 
     if let Some(proxy_url) = &config.proxy {
@@ -433,6 +439,7 @@ mod tests {
             api_token: api_token.map(String::from),
             username: username.map(String::from),
             password: password.map(String::from),
+            timeout: 60,
             proxy: None,
             tls_insecure: false,
             tls_ca_file: None,

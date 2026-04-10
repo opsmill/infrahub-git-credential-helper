@@ -29,6 +29,7 @@ Configuration is resolved in the following order:
 | Config file path | `INFRAHUB_CONFIG` | - | `infrahub.toml` |
 | Username | `INFRAHUB_USERNAME` | - | None |
 | Password | `INFRAHUB_PASSWORD` | - | None |
+| Timeout (seconds) | `INFRAHUB_TIMEOUT` | - | `30` |
 | Proxy | `INFRAHUB_PROXY` | - | None |
 | Skip TLS verification | `INFRAHUB_TLS_INSECURE` | - | `false` |
 | Custom CA certificate | `INFRAHUB_TLS_CA_FILE` | - | None |
