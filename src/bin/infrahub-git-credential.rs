@@ -57,7 +57,7 @@ fn parse_helper_get_input(text: &str) -> Result<String, String> {
 
     if path.is_none() {
         return Err(
-            "Git usehttppath must be enabled to use this helper. You can active it with\n    git config --global credential.usehttppath true\n    ".to_string(),
+            "Git usehttppath must be enabled to use this helper. You can activate it with\n    git config --global credential.usehttppath true\n    ".to_string(),
         );
     }
 

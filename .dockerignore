@@ -3,5 +3,10 @@ target/
 .github/
 .omc/
 .claude/
+dev/
 *.md
 LICENSE.txt
+Makefile
+.goreleaser.yml
+.dockerignore
+.gitignore
