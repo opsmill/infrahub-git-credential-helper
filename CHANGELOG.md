@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.0] - 2026-04-13
+
+### Added
+
+- Password authentication via `INFRAHUB_USERNAME` / `INFRAHUB_PASSWORD` (logs in via `/api/auth/login` to obtain a bearer token)
+- Proxy support via `INFRAHUB_PROXY`
+- TLS configuration: `INFRAHUB_TLS_INSECURE` and `INFRAHUB_TLS_CA_FILE`
+- Configurable HTTP timeout via `INFRAHUB_TIMEOUT`
+- `X-Infrahub-Tracker` header (`infrahub-git-credential-helper`) on GraphQL requests
+
 ## [0.1.2] - 2026-04-07
 
 ### Fixed
