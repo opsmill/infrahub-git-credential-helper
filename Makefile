@@ -1,4 +1,4 @@
-.PHONY: build release check fmt lint test clean docker update-schema
+.PHONY: build release check fmt lint test wheel clean docker update-schema
 
 build:
 	cargo build
@@ -19,8 +19,12 @@ lint:
 test:
 	cargo test -- --test-threads=1
 
+wheel:
+	uvx maturin build --release --out dist
+
 clean:
 	cargo clean
+	rm -rf dist
 
 docker:
 	docker build -t registry.opsmill.io/opsmill/infrahub-git-credential-helper .
