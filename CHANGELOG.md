@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Python wheel distribution via [maturin](https://www.maturin.rs/): both binaries are now installable with `pip` / `uv` / `poetry` (`infrahub-git-credential-helper`) and land on `PATH`, the same model as `ruff`/`ty`. Wheels are published to PyPI on release for Linux and macOS (`amd64`/`arm64`). See `dev/PACKAGING.md`.
+
 ## [0.2.0] - 2026-04-13
 
 ### Added

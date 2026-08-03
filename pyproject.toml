@@ -1,0 +1,31 @@
+[build-system]
+requires = ["maturin>=1.14,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "infrahub-git-credential-helper"
+description = "Git credential helpers for Infrahub, distributed as standalone binaries"
+readme = "README.md"
+requires-python = ">=3.8"
+license = "Apache-2.0"
+license-files = ["LICENSE.txt"]
+authors = [{ name = "OpsMill" }]
+keywords = ["infrahub", "git", "credential-helper", "askpass"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Rust",
+    "Topic :: Software Development :: Version Control :: Git",
+]
+dynamic = ["version"]
+
+[project.urls]
+Repository = "https://github.com/opsmill/infrahub-git-credential-helper"
+
+# This is a binary-only distribution: maturin compiles the crate's `[[bin]]`
+# targets and packages them as wheel scripts, so `infrahub-git-credential` and
+# `infrahub-git-askpass` land on PATH (in <venv>/bin) on install. No Python
+# module is shipped. The wheel version is read from Cargo.toml (`dynamic`).
+[tool.maturin]
+bindings = "bin"
+strip = true

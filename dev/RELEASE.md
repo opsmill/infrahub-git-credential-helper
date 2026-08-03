@@ -36,7 +36,10 @@ This document describes how to cut a new release.
    gh release create vX.Y.Z --title vX.Y.Z --notes "<changelog entry>"
    ```
 
-   The release workflow will then build Docker images and binary archives, attaching them to the release.
+   The release workflow will then build Docker images and binary archives
+   (attaching them to the release) and publish Python wheels to PyPI. See
+   `dev/PACKAGING.md` for the wheel/PyPI details and the one-time trusted-publisher
+   setup.
 
 ## Automation
 

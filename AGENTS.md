@@ -23,6 +23,7 @@ Run a single test: `cargo test --lib <test_name> -- --test-threads=1`.
 
 - **`dev/ARCHITECTURE.md`** — code design, GraphQL codegen, config/auth flow, test constraints
 - **`dev/DOCKER.md`** — Dockerfile caching quirks, multi-arch pipeline, GoReleaser
+- **`dev/PACKAGING.md`** — maturin wheel build, PyPI publishing, how Infrahub consumes the binaries via pip/uv (and the monorepo-vendoring alternative)
 - **`dev/COMPATIBILITY.md`** — **read this before "fixing" anything**. Lists quirks (splitting semantics, stdout/stderr routing) that are intentional drop-in-replacement constraints
 - **`dev/RELEASE.md`** — release process
 

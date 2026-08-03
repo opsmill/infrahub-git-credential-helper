@@ -42,6 +42,28 @@ Both binaries also accept `--config-file <path>` to override the config file pat
 
 Environment variables take precedence over TOML values.
 
+## Installation
+
+The binaries are published to PyPI as a [maturin](https://www.maturin.rs/)-built
+wheel (the same distribution model as `ruff` and `ty`). Installing the package
+places both `infrahub-git-credential` and `infrahub-git-askpass` on your `PATH`,
+so any Python project manager works:
+
+```sh
+uv add infrahub-git-credential-helper
+# or
+pip install infrahub-git-credential-helper
+# or
+poetry add infrahub-git-credential-helper
+```
+
+This is the recommended way to bundle the helpers into a Python application
+(such as the Infrahub server): add it as a dependency and the binaries are
+installed into the environment's `bin/` directory alongside any console
+scripts. Wheels are provided for Linux and macOS on both `amd64` and `arm64`;
+they are independent of the Python version. See `dev/PACKAGING.md` for how this
+is built and published.
+
 ## Building
 
 ```sh
