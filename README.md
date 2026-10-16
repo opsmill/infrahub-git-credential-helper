@@ -6,7 +6,7 @@ Git credential helpers for [Infrahub](https://github.com/opsmill/infrahub). Thes
 
 ### `infrahub-git-credential`
 
-A [git credential helper](https://git-scm.com/docs/gitcredentials) that implements the `get` and `store` subcommands. When git needs credentials for a remote, this helper queries Infrahub for the repository's stored credentials.
+A [git credential helper](https://git-scm.com/docs/gitcredentials) that implements the `get`, `store`, and `erase` subcommands. When git needs credentials for a remote, this helper queries Infrahub for the repository's stored credentials. `store` and `erase` are no-ops: the helper never writes to or deletes from Infrahub.
 
 Requires `credential.useHttpPath` to be enabled:
 
